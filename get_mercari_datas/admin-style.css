@@ -1,0 +1,58 @@
+﻿@charset "UTF-8";
+.configs_area{
+margin-top:20px;
+margin-bottom:30px;
+}
+.configs_area h3{
+margin:8px 4px;
+padding:3px 8px;
+border-left:6px solid #999;
+}
+
+.p_area{
+width: calc(100% - 80px);
+}
+.p_title{
+margin-bottom:15px;
+width: 100%;
+padding:0 7px;
+}
+.p_left{
+width:65%;
+display:inline-block;vertical-align:top;
+padding:0 8px;
+}
+.p_right{
+display:inline-block;vertical-align:top;
+width:30%;
+padding:0 8px;
+}
+.p_left iframe{
+width:100%;
+height:350px;
+border:1px solid #ddd;
+}
+.p_textarea{
+width:100%;
+}
+.p_right img{
+width:100%;
+height:170px;
+}
+.p_form_t{
+width:100%;
+}
+.edit_area input[type="text"],input[type="time"],input[type="date"]{
+width:100%;
+}
+.area_title{
+border-left:6px solid #aaa;
+padding:4px 8px;
+margin-bottom:6px;
+font-size:16px;
+font-weight: bold;
+}
+.edit_area{
+width:100%;
+margin-bottom:20px;
+}

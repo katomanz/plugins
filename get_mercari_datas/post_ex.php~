@@ -1,0 +1,230 @@
+<?php
+error_reporting(-1);
+require dirname(__FILE__) . '/vendor/autoload.php';
+header("Content-Type: text/html;charset=UTF-8");
+require_once( dirname(__FILE__) . '/../../../wp-load.php' );
+	global $wpdb;
+		$wpdb->show_errors();
+		require_once( dirname( __FILE__ ) . '/../../../wp-admin/includes/taxonomy.php' );
+date_default_timezone_set('Asia/Tokyo');
+require_once dirname(__FILE__) . "/goutte-v3.1.0.phar";
+use Goutte\Client;
+use Symfony\Component\DomCrawler\Crawler;
+$crawler = new Crawler();
+
+// facebook/php-webdriver
+use Facebook\WebDriver;
+use Facebook\WebDriver\WebDriverExpectedCondition;
+use Facebook\WebDriver\WebDriverBy;
+use Facebook\WebDriver\Chrome\ChromeOptions;
+use Facebook\WebDriver\Chrome\ChromeDriver;
+use Facebook\WebDriver\Remote;
+use Facebook\WebDriver\Remote\RemoteWebDriver;
+use Facebook\WebDriver\Remote\DesiredCapabilities;
+use Facebook\WebDriver\WebDriverKeys;
+use Facebook\WebDriver\WebDriverSelect;
+
+function startBrowser($link1,$debug){
+    $status = true;
+    $driver = null;
+	global $crawler;
+	global $wpdb;
+
+    try {
+	echo $link1 . '__start<br>';
+	$ua = 'Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; Touch; rv:11.0) like Gecko';
+        $driverPath = getcwd() . '/ChromeDriver_75.0.3770.140';
+        putenv('webdriver.chrome.driver=' . $driverPath);
+        // オプション
+        $options = new ChromeOptions();
+        $options->addArguments([
+            '--no-sandbox',
+            '--headless',
+            '--disable-gpu',
+            '--ignore-certificate-errors',
+	'--user-agent='.$ua,
+	'--lang=ja',
+        ]);
+
+        $caps = DesiredCapabilities::chrome();
+        $caps->setCapability(ChromeOptions::CAPABILITY, $options);
+        $driver = ChromeDriver::start($caps, null, 1000*60*5, 1000*60*10);
+        $driver->manage()->window()->maximize();
+
+        $driver->get('https://www.google.com/');
+	echo $driver->getPageSource();
+	$html = $driver->getPageSource();
+
+	$crawler->addHtmlContent($html);
+	$page_1 = $crawler->html();
+
+	echo $driver->getTitle().'<br>';
+	$i = 0;
+	$crawler->filter('.items-box')->each(function($node) use (&$i,&$debug,&$crawler,&$driver,&$wpdb) {
+		$title = $node->filter('h3.items-box-name')->eq(0)->text();//タイトル
+		$price = $node->filter('.items-box-price')->eq(0)->text();//値段
+		$url = $node->filter('a')->eq(0)->attr('href');//アイテムurl
+
+			$str = str_replace('https://item.mercari.com/jp/', '',$url);
+			$pieces = explode('/', $str);
+			$merukari_id = $pieces[0];
+			echo "merukari_id：{$merukari_id}<br>";
+
+			$driver->get($url);
+			$html2 = $driver->getPageSource();
+			$crawler2 = new Crawler();
+			$crawler2->addHtmlContent($html2);
+
+			$sub_category = $crawler2->filter('.item-detail-table-sub-category')->eq(0)->text();//サブカテゴリ
+				$sub_category = trim($sub_category);
+			$sub_sub_category = $crawler2->filter('.item-detail-table-sub-sub-category')->eq(0)->text();//サブサブカテゴリ
+				$sub_sub_category = trim($sub_sub_category);
+			$imgUrl = $crawler2->filter('.owl-carousel img')->eq(0)->attr('data-src');//1枚目の画像URL
+			$data_1 = $crawler2->filter('.item-detail-table tr a')->eq(0)->attr('href');
+				$data_1 = substr($data_1, 0, -1);
+				$pieces = explode('/', $data_1);
+			$ownerId = end($pieces);//出品者のID
+			$ownerName = $crawler2->filter('.item-detail-table tr a')->eq(0)->text();
+			$category = $crawler2->filter('.item-detail-table tr')->eq(1)->filter('a')->eq(0)->text();//カテゴリ
+			$brand = $crawler2->filter('.item-detail-table tr')->eq(2)->filter('td')->eq(0)->text();//ブランド名
+			$brand = preg_replace("/( |　)|\s(?=\s)|[\n\r\t]/", "", $brand);
+			$sold = $crawler2->filter('.item-buy-btn')->eq(0)->text();//sold
+
+$get_imgd = get_headers($imgUrl);
+$post_timestamp = $get_imgd[5];
+$str = str_replace('Last-Modified: ', '',$post_timestamp);
+$d = new DateTime($str);
+$post_timestamp = $d->format('Y-m-d H:i:s');
+
+//echo "{$merukari_id}<br>";
+//重複を回避
+$dataf = $wpdb->get_results("SELECT id FROM wp_merukari_items WHERE `merukari_id`='{$merukari_id}' limit 1");
+$dnum = $wpdb->num_rows;
+	if ($dnum == 0) {
+
+//投稿
+if($debug == 0){
+$table_name = "wp_merukari_items";
+
+$wpdb->insert( 
+	$table_name, 
+	array(
+		'merukari_id'=>$merukari_id,
+		'title'=>$title,
+		'url'=>$url,
+		'price'=>$price,
+		'sold'=>$sold,
+		'category'=>$category,
+		'sub_category'=>$sub_category,
+		'sub_sub_category'=>$sub_sub_category,
+		'brand'=>$brand,
+		'imgUrl'=>$imgUrl,
+		'ownerId'=>$ownerId,
+		'ownerName'=>$ownerName,
+		'post_timestamp'=>$post_timestamp
+	), 
+	array( 
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s',
+		'%s'
+	) 
+);
+
+$insert_id = $wpdb->insert_id;
+
+	echo "{$insert_id}_postOK_{$title}<br>";
+	//var_dump($arr);
+}
+
+if($debug == 1){
+echo <<< EOM
+<div style="border:1px solid #ccc;padding:15px;margin-bottom:25px;">
+<div>タイトル：{$title}</div>
+<div>値段：{$price}</div>
+<div>URL：{$url}</div>
+<div>アイテムID：{$merukari_id}</div>
+<div>ブランド名：{$brand}</div>
+<div>カテゴリ：{$category}</div>
+<div>サブカテゴリ：{$sub_category}</div>
+<div>サブサブカテゴリ：{$sub_sub_category}</div>
+<div>画像URL：{$imgUrl}</div>
+<div>出品者のID：{$ownerId}</div>
+<div>出品者の名前：{$ownerName}</div>
+<div>画像投稿時間：{$post_timestamp}</div>
+</div>
+EOM;
+}
+
+}
+	$i++;
+if($i >= 1){exit;}
+
+});
+
+
+
+    }
+    catch (\Exception $e) {
+        print_r($e->getMessage());
+        $status = false;
+    }
+    if (!is_null($driver)) {
+        $driver->quit();
+    }
+    return $status;
+}
+
+
+///////////////////////////
+if(get_option('gmp_post_conf_1') !== false){
+$conf1 = get_option('gmp_post_conf_1');
+	$set1 = (int)$conf1['conf_1'];
+	$set2 = (int)$conf1['conf_2'];
+	$set3 = $conf1['conf_3'];
+	$set4 = $conf1['conf_4'];
+	$set5 = $conf1['conf_5'];
+	$set6 = $conf1['conf_6'];
+	$set7 = $conf1['conf_7'];
+	$set8 = $conf1['conf_8'];
+	$set9 = $conf1['conf_9'];
+	$set10 = $conf1['conf_10'];
+}else{
+	$set1 = 20;
+	$set2 = 1;
+	$set3 = '';
+	$set4 = '';
+	$set5 = '';
+	$set6 = 'status_on_sale=1';
+	$set7 = '0';
+	$set8 = 'created_desc';
+	$set9 = 0;
+	$set10 = array('item_condition_id[1]=1');
+}
+	if($set1 == '' or $set2 == ''){echo '取得設定をしてください';}
+if (isset($_GET['debug'])) {$debug = 1;}else{$debug = 0;}
+$condition = '';
+foreach( $set10 as $value ) {
+	$condition .= '&'.$value;
+}
+
+// URL指定
+$rest = $set2 + $set1 -1;
+while( (int)$set2 <= (int)$rest ) {
+echo "{$set2}page/{$rest}page<br>";
+$url = "https://www.mercari.com/jp/search/?sort_order={$set8}&keyword={$set3}&category_root={$set7}&price_min={$set4}&price_max={$set5}{$condition}&{$set6}&page={$set2}";
+//echo $url.'<br>';
+$res = startBrowser($url,$debug);
+$set2++;
+}
+
+?>
